@@ -17,12 +17,9 @@ const log = logging.logSync(LOG_NAME);
 const createPoolAndEnsureSchema = async () =>
   await createPool()
     .then(pool => {
-        // writeLog("about to log pool from within createPoolAndEnsureSchema");
-        // writeLog(pool, "ALERT");
       return pool;
     })
     .catch(err => {
-      writeLog("an error occurred creating pool!!!", "ERROR")
       throw err;
     });
 
@@ -70,7 +67,7 @@ const createPool = async () => {
 
 const createTcpPool = async config => {
     // Extract host and port from socket address
-    const dbSocketAddr = process.env.DB_HOST.split(':'); // e.g. '127.0.0.1:5432'
+    const dbSocketAddr = process.env.DB_HOST.split(':');
 
     // Establish a connection to the database
     return Knex({
@@ -90,34 +87,45 @@ const typeDefs = gql`
     type EDCLog {
         edc_logger_id: ID
         application_name: String
-        run_id: Int
+        run_id: String
         notes: String
     }
     type Query {
-        _dummy: String
+        edcLogs: [EDCLog]
     }
     type Mutation {
-        edcLog(runId: Int, appName: String, notes: String): EDCLog
+        addEdcLog(runId: String, appName: String, notes: String): EDCLog
     }
 `;
 
 const setEdcLog = async (app_name, run_id, notes) => {
-    // writeLog("about to log db/pool", "ALERT")
-    // let json = JSON.stringify(db);
-    // writeLog(json, "ALERT");
-    // writeLog(db, "ALERT");
     let res = await pool("edc_logger").insert([{ application_name: app_name ,  run_id: run_id ,  notes: notes }]);
+    return res;
+}
+
+const getEdcLogs = async () => {
+    let res = await pool.select("*").from("edc_logger");
     return res;
 }
 
 // Provide resolver functions for your schema fields
 const resolvers = {
+    Query: {
+        async edcLogs(parent, args, context, info) {
+            // Ensure that there is a connection to the DB
+            pool = pool || (await createPoolAndEnsureSchema())
+            // if(args && args.appName && args.runId && args.notes) {
+                let res = await getEdcLogs();
+                return res;
+            // } else {
+            //     writeLog("The required arguments were not passed to the edc-logger schema!", "ERROR")
+            // }
+        }
+    },
     Mutation: {
-      async edcLog(parent, args, context, info) {
+      async addEdcLog(parent, args, context, info) {
           // Ensure that there is a connection to the DB
-          pool = pool || (await createPoolAndEnsureSchema()); 
-        //   writeLog("in Mutation property!", "ALERT")
-          // Validate request body 
+          pool = pool || (await createPoolAndEnsureSchema())
           if(args && args.appName && args.runId && args.notes) {
               let res = await setEdcLog(args.appName, args.runId, args.notes);
               return res;
